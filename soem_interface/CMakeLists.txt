@@ -34,7 +34,7 @@ find_package(soem_rsl REQUIRED)
 find_package(message_logger REQUIRED)
 
 add_library(
-  ${PROJECT_NAME}
+  ${PROJECT_NAME} SHARED
   src/${PROJECT_NAME}/common/ThreadSleep.cpp
   src/${PROJECT_NAME}/common/Macros.cpp
   src/${PROJECT_NAME}/EthercatSlaveBase.cpp

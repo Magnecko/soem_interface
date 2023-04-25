@@ -50,7 +50,7 @@ include_directories(
 )
 
 add_library(
-  ${PROJECT_NAME}
+  ${PROJECT_NAME} SHARED
   src/${PROJECT_NAME}/ExampleSlave.cpp
 )
 add_dependencies(

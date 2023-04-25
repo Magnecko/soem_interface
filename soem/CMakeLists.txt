@@ -66,7 +66,7 @@ file(GLOB OSHW_HEADERS soem/oshw/${OS}/*.h)
 
 message(${OSAL_HEADERS})
 
-add_library(soem STATIC
+add_library(soem SHARED
   ${SOEM_SOURCES}
   ${OSAL_SOURCES}
   ${OSHW_SOURCES}
