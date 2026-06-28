@@ -258,11 +258,11 @@ struct EthercatBusBaseTemplateAdapter::EthercatSlaveBaseImpl {
       ++workingCounterTooLowCounter_;
       MELO_DEBUG_STREAM("[soem_interface_rsl::" << name_ << "] Working counter too low counter: " << workingCounterTooLowCounter_)
       MELO_DEBUG_THROTTLE_STREAM(1.0, "[soem_interface_rsl::" << getName() << "] Update Read:" << this);
-      MELO_WARN_STREAM("[soem_interface_rsl::" << name_ << "] Working counter is too low: " << wkc_.load() << " < "
+      MELO_WARN_THROTTLE_STREAM(0.2, "[soem_interface_rsl::" << name_ << "] Working counter is too low: " << wkc_.load() << " < "
                                                << expectedWorkingCounter << ", wkc's to low in a row: " << workingCounterTooLowCounter_);
       {
         std::lock_guard<std::mutex> guard(contextMutex_);
-        MELO_WARN_STREAM("[soem_interface_rsl" << name_ << "] For all slaves alStatusCode: 0x" << std::setfill('0') << std::setw(8)
+        MELO_WARN_THROTTLE_STREAM(0.2, "[soem_interface_rsl" << name_ << "] For all slaves alStatusCode: 0x" << std::setfill('0') << std::setw(8)
                                                << std::hex << ecatContext_.slavelist[0].ALstatuscode << " "
                                                << ec_ALstatuscode2string(ecatContext_.slavelist[0].ALstatuscode));
       }
