@@ -55,12 +55,32 @@ struct RegisterDefinition {
   static_assert(std::is_same_v<std::underlying_type_t<RegAddrEnum>, uint16_t>);
   std::array<RegEntry<RegAddrEnum>, static_cast<size_t>(RegAddrEnum::SIZE)> Registers;
 
-  [[nodiscard]] constexpr uint16_t memorySize() const {
-    uint16_t size{0};
+  //! Lowest register address in the list. Every offset, and the single read
+  //! that backs getValueFromRawAs(), is relative to it.
+  [[nodiscard]] constexpr uint16_t baseAddr() const {
+    uint16_t base{Registers.front().addr};
     for (const auto& reg : Registers) {
-      size += reg.regTypeEnum;
+      if (reg.addr < base) {
+        base = reg.addr;
+      }
     }
-    return size;
+    return base;
+  }
+
+  //! Number of bytes one datagram has to transfer to cover every register in
+  //! the list. This is the ADDRESS SPAN, not the sum of the entry sizes: a
+  //! list may skip reserved registers (ERROR_COUNTERS_LIST omits 0x030E and
+  //! 0x030F), and those gaps still occupy bytes in the returned blob.
+  [[nodiscard]] constexpr uint16_t memorySize() const {
+    const uint16_t base = baseAddr();
+    uint16_t end{base};
+    for (const auto& reg : Registers) {
+      const auto regEnd = static_cast<uint16_t>(reg.addr + reg.regTypeEnum);
+      if (regEnd > end) {
+        end = regEnd;
+      }
+    }
+    return static_cast<uint16_t>(end - base);
   }
   using iterator = typename std::array<RegEntryType, static_cast<size_t>(RegAddrEnum::SIZE)>::iterator;
   using const_iterator = typename std::array<RegEntryType, static_cast<size_t>(RegAddrEnum::SIZE)>::const_iterator;
@@ -78,24 +98,26 @@ struct RegisterDefinition {
     throw std::runtime_error("Could not find Register by regAddrsEnum");
   };
 
+  //! Byte offset of a register inside a blob of memorySize() bytes read from
+  //! baseAddr(). Derived from the address, so registers that are missing from
+  //! the list (reserved ones) do not shift the entries that follow them.
   [[nodiscard]] constexpr uint16_t offsetByAddr(RegAddrEnum regAddrEnum) const {
-    uint16_t offset{0};
+    const auto addr = static_cast<uint16_t>(regAddrEnum);
     for (const auto& reg : Registers) {
-      if (reg.addr == static_cast<uint16_t>(regAddrEnum)) {
-        return offset;
+      if (reg.addr == addr) {
+        return static_cast<uint16_t>(addr - baseAddr());
       }
-      offset += reg.regTypeEnum;
     }
     throw std::runtime_error("Could not find Register by regAddrsEnum");
   };
 
-  // calcualtes the size required to read up to/including the given register.
+  //! Calculates the size required to read up to/including the given register,
+  //! again as an address span rather than a sum of entry sizes.
   [[nodiscard]] constexpr uint16_t sizeUpToAddr(RegAddrEnum regAddrEnum) const {
-    uint16_t size{0};
+    const auto addr = static_cast<uint16_t>(regAddrEnum);
     for (const auto& reg : Registers) {
-      size += reg.regTypeEnum;
-      if (reg.addr == static_cast<uint16_t>(regAddrEnum)) {
-        return size;
+      if (reg.addr == addr) {
+        return static_cast<uint16_t>(addr + reg.regTypeEnum - baseAddr());
       }
     }
     throw std::runtime_error("Could not calc size by endAddr");
@@ -152,7 +174,9 @@ struct SOEM_RSL_EXPORT REG  {
     LOST_LINK_CNT_PORT1 = 0x0311,
     LOST_LINK_CNT_PORT2 = 0x0312,
     LOST_LINK_CNT_PORT3 = 0x0313,
-    SIZE = 18  // 18 bytes - we can easily read this in one datagram per slave.
+    SIZE = 18  // 18 registers, spanning 20 bytes (0x0300..0x0313) because the
+               // reserved 0x030E/0x030F are not listed. memorySize() reports
+               // the span, so this is still one datagram per slave.
   };
 
   static constexpr RegisterDefinition<RegEntry<ERROR_COUNTERS>> ERROR_COUNTERS_LIST{
@@ -160,7 +184,7 @@ struct SOEM_RSL_EXPORT REG  {
       RegEntry(ERROR_COUNTERS::PHYSICAL_ERROR_PORT0_ADDR, RegTypeEnum::Unsigned8, "Physical error count port 0"),
       RegEntry(ERROR_COUNTERS::FRAME_ERROR_PORT1_ADDR, RegTypeEnum::Unsigned8, "Frame error count port 1"),
       RegEntry(ERROR_COUNTERS::PHYSICAL_ERROR_PORT1_ADDR, RegTypeEnum::Unsigned8, "Physical error count port 1"),
-      RegEntry(ERROR_COUNTERS::FRAME_ERROR_PORT2_ADDR, RegTypeEnum::Unsigned8, "Frame error count prot 2"),
+      RegEntry(ERROR_COUNTERS::FRAME_ERROR_PORT2_ADDR, RegTypeEnum::Unsigned8, "Frame error count port 2"),
       RegEntry(ERROR_COUNTERS::PHYSICAL_ERROR_PORT2_ADDR, RegTypeEnum::Unsigned8, "Physical error count port 2"),
       RegEntry(ERROR_COUNTERS::FRAME_ERROR_PORT3_ADDR, RegTypeEnum::Unsigned8, "Frame error count port 3"),
       RegEntry(ERROR_COUNTERS::PHYSICAL_ERROR_PORT3_ADDR, RegTypeEnum::Unsigned8, "Physical error count port 3"),

@@ -430,13 +430,19 @@ struct EthercatBusBaseTemplateAdapter::EthercatSlaveBaseImpl {
         size_t currentRegNo{0};
         for (const auto& reg : REG::ERROR_COUNTERS_LIST) {
           uint8_t value = REG::ERROR_COUNTERS_LIST.getValueFromRawAs<uint8_t>(reg.addrEnum, rawData, REG::ERROR_COUNTERS_LIST.memorySize());
-          if (busDiagnosisLog_.errorCounters_[busDiagOfCurrentSlave_][currentRegNo].previousValue > value) {
-            // we had an overflow, (or multiple..) lets assume it was one, we just have to diagnose fast enough..
-            busDiagnosisLog_.errorCounters_[busDiagOfCurrentSlave_][currentRegNo].fullValue +=
-                (255 - busDiagnosisLog_.errorCounters_[busDiagOfCurrentSlave_][currentRegNo].previousValue) + value;
+          auto& counter = busDiagnosisLog_.errorCounters_[busDiagOfCurrentSlave_][currentRegNo];
+          // The ESC error counters are themselves cumulative and are not cleared on read, so only their growth since
+          // the previous read is new. Adding `value` itself would accumulate the running sum of every read instead of
+          // the error count. Note they saturate at 0xFF: once a register reaches 255 no further errors are observable
+          // without clearing it, which this class deliberately does not do (it would hide errors from other tools).
+          if (value >= counter.previousValue) {
+            counter.fullValue += static_cast<unsigned long>(value - counter.previousValue);
           } else {
-            busDiagnosisLog_.errorCounters_[busDiagOfCurrentSlave_][currentRegNo].fullValue += value;
+            // A counter that went down was cleared by someone else (ETG1000.4 counters saturate, they do not wrap),
+            // so everything it reads now has been counted since that clear.
+            counter.fullValue += value;
           }
+          counter.previousValue = value;
           currentRegNo++;
         }
       } else {
