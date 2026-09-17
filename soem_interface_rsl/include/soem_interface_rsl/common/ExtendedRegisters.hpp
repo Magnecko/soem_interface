@@ -245,6 +245,22 @@ struct BusDiagnosisLog {
   uint16_t ecatApplicationLayerStatus{};
 };
 
+// One slave's position in the physical bus wiring, as computed once by SOEM's
+// ecx_config_init() (soem_rsl ethercatconfig.c) during bus enumeration.  This
+// is static for the process lifetime: this SDK has no rescan/recovery path
+// that ever recomputes it after a slave drops off and reconnects.
+struct SlaveTopologyEntry {
+  std::string name{};
+  uint16_t address{0};
+  // Bus-scan address of the parent slave, 0 if the slave hangs directly off the master.
+  uint16_t parentAddress{0};
+  // Bitmask of the slave's 4 ECAT ports that are wired to another device.
+  uint8_t activePorts{0};
+  // Number of active links (1 = end of a chain/branch, 2 = pass-through, 3-4 = a junction).
+  uint8_t topology{0};
+};
+using BusTopology = std::vector<SlaveTopologyEntry>;
+
 }  // namespace soem_interface_rsl
 
 #endif  // ETHERCAT_WS_EXTENDEDREGISTERS_HPP

@@ -25,6 +25,14 @@
 
 #include <soem_rsl/ethercat.h>
 
+#include <chrono>
+#include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+
 namespace soem_interface_rsl {
 
 static bool busIsAvailable(const std::string& name) {
@@ -492,6 +500,23 @@ struct EthercatBusBaseTemplateAdapter::EthercatSlaveBaseImpl {
       pdoMap.insert(std::make_pair(slave->getName(), getHardwarePdoSizes(slave->getAddress())));
     }
     return pdoMap;
+  }
+
+  BusTopology getBusTopology() {
+    BusTopology topology;
+    std::lock_guard<std::mutex> guard(contextMutex_);
+    for (const auto& slave : slaves_) {
+      const auto address = slave->getAddress();
+      const auto& ecSlave = ecatContext_.slavelist[address];
+      SlaveTopologyEntry entry;
+      entry.name = slave->getName();
+      entry.address = address;
+      entry.parentAddress = ecSlave.parent;
+      entry.activePorts = ecSlave.activeports;
+      entry.topology = ecSlave.topology;
+      topology.push_back(entry);
+    }
+    return topology;
   }
 
   bool sdoWrite(const uint16_t slave, const uint16_t index, const uint8_t subindex, const bool completeAccess, int size, void* buf) {
@@ -991,6 +1016,45 @@ EthercatBusBase::PdoSizeMap EthercatBusBase::getHardwarePdoSizes() {
 
 EthercatBusBase::PdoSizePair EthercatBusBase::getHardwarePdoSizes(const uint16_t slave) {
   return pImpl_->getHardwarePdoSizes(slave);
+}
+
+BusTopology EthercatBusBase::getBusTopology() {
+  return pImpl_->getBusTopology();
+}
+
+bool EthercatBusBase::writeBusTopologyToFile(const std::string& filePath) {
+  std::string path = filePath;
+  if (path.empty()) {
+    const char* home = std::getenv("HOME");
+    if (home == nullptr) {
+      MELO_ERROR_STREAM("[" << getName() << "] Could not determine $HOME to write the bus topology file.");
+      return false;
+    }
+    const std::string folder = std::string(home) + "/.ethercat_master/" + getName();
+    std::error_code ec;
+    std::filesystem::create_directories(folder, ec);
+    if (ec) {
+      MELO_ERROR_STREAM("[" << getName() << "] Could not create directory '" << folder << "': " << ec.message());
+      return false;
+    }
+    const auto currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&currentTime), "%Y-%m-%d_%H:%M:%S");
+    path = folder + "/" + ss.str() + "_topology.csv";
+  }
+
+  std::ofstream file(path);
+  if (!file.is_open()) {
+    MELO_ERROR_STREAM("[" << getName() << "] Could not open bus topology file '" << path << "' for writing.");
+    return false;
+  }
+  file << "slave, address, parent_address, active_ports, topology_links\n";
+  for (const auto& entry : getBusTopology()) {
+    file << entry.name << ", " << entry.address << ", " << entry.parentAddress << ", " << static_cast<unsigned int>(entry.activePorts)
+         << ", " << static_cast<unsigned int>(entry.topology) << "\n";
+  }
+  MELO_INFO_STREAM("[" << getName() << "] Wrote bus topology to: " << path);
+  return true;
 }
 
 soem_interface_rsl::ETHERCAT_SM_STATE EthercatBusBase::getEthercatState(const uint16_t slave) {

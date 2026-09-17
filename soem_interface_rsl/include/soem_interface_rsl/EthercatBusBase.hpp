@@ -243,6 +243,26 @@ class SOEM_RSL_EXPORT EthercatBusBase : private EthercatBusBaseTemplateAdapter {
   PdoSizePair getHardwarePdoSizes(const uint16_t slave);
 
   /*!
+   * Returns the physical bus wiring (which slave is wired to which) as computed once by
+   * SOEM during bus enumeration in "startup". The result is static for the process
+   * lifetime, so it only needs to be read once, not polled.
+   *
+   * @return     One entry per slave, in bus scan order.
+   */
+  BusTopology getBusTopology();
+
+  /*!
+   * Convenience wrapper around getBusTopology() that serialises it to a CSV file. Call this
+   * once, after "startup" has succeeded.
+   *
+   * @param      filePath  Output path. If empty (default), a timestamped file is created at
+   *                       ~/.ethercat_master/<bus name>/<timestamp>_topology.csv, mirroring
+   *                       the location convention of ethercat_sdk_master's diagnosis log.
+   * @return     true if the file was written successfully.
+   */
+  bool writeBusTopologyToFile(const std::string& filePath = "");
+
+  /*!
    * Send a writing SDO.
    * @param slave          Address of the slave.
    * @param index          Index of the SDO.
