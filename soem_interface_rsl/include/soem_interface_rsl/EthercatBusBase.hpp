@@ -107,6 +107,17 @@ class SOEM_RSL_EXPORT EthercatBusBase : private EthercatBusBaseTemplateAdapter {
   static void printAvailableBusses();
 
   /*!
+   * The names of all network interfaces.
+   */
+  static std::vector<std::string> getAvailableBusses();
+
+  /*!
+   * Count the slaves that answer a broadcast read, without changing their state or the interface's flags.
+   * @return The number of slaves, or -1 if the bus can't be opened (e.g. without CAP_NET_RAW).
+   */
+  static int countSlaves(const std::string& name);
+
+  /*!
    * Check if this bus is available.
    * @return True if available.
    */
