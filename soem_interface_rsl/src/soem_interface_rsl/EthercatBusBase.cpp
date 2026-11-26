@@ -25,8 +25,14 @@
 
 #include <soem_rsl/ethercat.h>
 
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -917,6 +923,39 @@ void EthercatBusBase::printAvailableBusses() {
     MELO_INFO_STREAM("- Name: '" << adapter->name << "', description: '" << adapter->desc << "'");
     adapter = adapter->next;
   }
+}
+
+std::vector<std::string> EthercatBusBase::getAvailableBusses() {
+  std::vector<std::string> names;
+  ec_adaptert* adapters = ec_find_adapters();
+  for (ec_adaptert* adapter = adapters; adapter != nullptr; adapter = adapter->next) {
+    names.emplace_back(adapter->name);
+  }
+  ec_free_adapters(adapters);
+  return names;
+}
+
+int EthercatBusBase::countSlaves(const std::string& name) {
+  // ec_init() sets IFF_PROMISC and ec_close() doesn't reset it.
+  ifreq flags{};
+  std::strncpy(flags.ifr_name, name.c_str(), IFNAMSIZ - 1);
+  const int flagsSocket = socket(AF_INET, SOCK_DGRAM, 0);
+  const bool haveFlags = flagsSocket >= 0 && ioctl(flagsSocket, SIOCGIFFLAGS, &flags) == 0;
+
+  int slaves = -1;
+  if (ec_init(name.c_str()) > 0) {
+    uint16 slaveType = 0;
+    slaves = std::max(ec_BRD(0x0000, ECT_REG_TYPE, sizeof(slaveType), &slaveType, EC_TIMEOUTSAFE), 0);
+  }
+  ec_close();
+
+  if (haveFlags) {
+    ioctl(flagsSocket, SIOCSIFFLAGS, &flags);
+  }
+  if (flagsSocket >= 0) {
+    close(flagsSocket);
+  }
+  return slaves;
 }
 
 const std::string& EthercatBusBase::getName() const {
